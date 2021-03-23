@@ -41,6 +41,17 @@ class GaussianNoise(nn.Module):
             return din + torch.randn(din.size()) * self.stddev
         return din
 
+class DropoutNoise(nn.Module):
+    def __init__(self, p):
+        super().__init__()
+        self.p = p
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    def forward(self, x):
+        t = torch.rand(x.size()).to(self.device)
+        a = t > self.p
+        
+        return(x*a)
+
 class BasicBlock(nn.Module):
     def __init__(self, input_shape, n_neurons, activation='relu', noise=None, noise_arg=None):
         super().__init__()

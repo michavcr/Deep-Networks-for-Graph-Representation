@@ -17,10 +17,6 @@ from sklearn.metrics import mean_squared_error
 from math import sqrt
 import time
 
-from autoencoder import *
-from utils import *
-from pu_learner import *
-
 def random_graph(p, size=(100,100)):
     return(np.array([[int(random.random() < p) for i in range(size[1])] for j in range(size[0])]))
 
@@ -95,25 +91,4 @@ def connected_components(adj):
     return(np.array(comp))
 
 if __name__ == '__main__':
-	N_rand_drugs = 784
-    N_rand_targets = 1000
-
-    density=0.2
-    #generate random matrices in M({0,1})
-    #1. a drug-drug network (drug similarities)
-    #2. a protein-protein network (protein similarities)
-    #3. a drug-protein network (drug-target known relationships)
-    dd_net = random_graph_with_fixed_components(density, [196,196,196,196])
-    pp_net = random_graph_with_fixed_components(density, [100 for i in range(10)])
-    dp_net = random_graph(density,size=(N_rand_drugs,N_rand_targets))
-
-    embeddings_drugs, _, _ = dngr_pipeline(dd_net, N_rand_drugs, [500, 200, 100])
-    embeddings_targets, _, _ = dngr_pipeline(pp_net, N_rand_targets, [500, 200, 100])
-    pos_train, neg_train, pos_test, neg_test = train_test_split_pu(dp_net)
-    S, H, W =pu_learning(embeddings_drugs, embeddings_targets, dp_net, pos_train, neg_train, k=30, maxiter=500000, alpha=0.8, gamma=50)
-
-    test = torch.logical_or(pos_test, neg_test)
-    train = torch.logical_or(pos_train, neg_train)
-
-    print(torch.sum(test), torch.sum(train))
-    print(torch.std(S), torch.std(S[test]), torch.std(S[train]))
+    pass

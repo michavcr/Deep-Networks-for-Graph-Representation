@@ -22,8 +22,29 @@ from utils import *
 from random_graphs import *
 from dgnr import *
 
+def get_train_test_masks(P, train_size=0.8):
+    P = torch.Tensor(P)
+    Ipos = (P == 1.)
+    Ineg = (P == 0.)
+
+    pos_train = Ipos * torch.rand(P.size())
+    pos_train[Ineg] = 1.
+    pos_train = pos_train < train_size
+    train_neg_rel_size = torch.sum(pos_train) / torch.sum(Ineg)
+    
+    neg_train = Ineg * torch.rand(P.size())
+    neg_train[Ipos] = 1.
+    neg_train = neg_train < train_neg_rel_size
+
+    train = pos_train + neg_train
+    test = ~train
+    pos_test = torch.logical_and(test, Ipos)
+    neg_test = torch.logical_and(test, Ineg)
+
+    return(pos_train, neg_train, pos_test, neg_test)
+    
 class PU_Learner(nn.Module):
-    def __init__(self, k, Fd, Ft):
+    def __init__(self, k, Fd, Ft, activation='identity'):
         super().__init__()
         self.k = k
         self.Fd = Fd
@@ -32,7 +53,9 @@ class PU_Learner(nn.Module):
         self.H = torch.nn.Parameter(torch.randn(Fd, k))
         self.W = torch.nn.Parameter(torch.randn(k, Ft))
         
-        self.activation = torch.nn.Sigmoid()
+        activ_dict = {'sigmoid': torch.nn.Sigmoid, 'identity': torch.nn.Identity}
+        self.activation = activ_dict[activation]()
+
     def forward(self, x, y):
     	  return(self.activation(torch.einsum('ij,jk,kl,li->i', x, self.H, self.W, torch.transpose(y, 1, 0))))
 
@@ -104,7 +127,7 @@ def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-3, print_ste
             # forward + backward + optimize
             outputs = model(x_batch, y_batch)
             
-            loss = criterion(outputs, labels)
+            loss = torch.sqrt(criterion(outputs, labels))
             loss.backward()
             optimizer.step()
 
@@ -125,4 +148,4 @@ def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-3, print_ste
     print(x.size(), model.H.size(), model.W.size(), y.size())
     S = torch.chain_matmul(x, model.H, model.W, torch.transpose(y,0,1))
     
-    return(S, model.H, model.W, train_mask, ~train_mask)   
+    return(S, model.H, model.W, train_mask, ~train_mask)  

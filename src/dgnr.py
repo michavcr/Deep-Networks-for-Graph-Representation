@@ -17,7 +17,9 @@ from sklearn.metrics import mean_squared_error
 from math import sqrt
 import time
 
-from autoencoder import *
+from autoencoder import SDAE
+from utils import *
+from random_graphs import connected_components
 
 def timeit(method):
     def timed(*args, **kw):
@@ -142,3 +144,41 @@ def sdae(input_net, input_number, hidden_layers, n_epochs=100, batch_size=1, act
     print('Finished Training')
     
     return(model, train_loader)
+
+def get_embeddings(train_loader, N, model, size_encoded=100):
+    trainiter = iter(train_loader)
+    embeddings = np.zeros((N, size_encoded))
+
+    for i,q in enumerate(trainiter):
+        embedded = model.encoder(q[0]).cpu().detach().numpy()
+        embeddings[i,:] = embedded.reshape((size_encoded,))
+    
+    return(embeddings)
+    
+@timeit
+def dngr_pipeline(network, N, hidden_layers, K=10, alpha=0.2, n_epochs=100, batch_size=1, activation='sigmoid', last_activation='sigmoid'):
+    ppmi_net = PPMI(PCO(network, K, alpha))
+    model, train_loader = sdae(ppmi_net, N, hidden_layers, n_epochs=n_epochs, batch_size=batch_size, activation=activation, last_activation=last_activation)
+    
+    print("[*] Visualizing an example's output...")
+    trainiter = iter(train_loader)
+    inputs, _ = trainiter.next()
+
+    print(inputs)
+    print(model(inputs))
+
+    print(mean_squared_error(inputs.cpu().detach().numpy(), model(inputs).cpu().detach().numpy()))
+    
+    print("[*] Getting the embeddings and visualizing t-SNE...")
+    embeddings=get_embeddings(train_loader, N, model, size_encoded=hidden_layers[-1])
+    
+    cmps = connected_components(network)
+    targets = [0 for i in range(N)]
+
+    for i, cmp in enumerate(cmps):
+        for n in cmp:
+            targets[n] = i
+    
+    visualize_TSNE(embeddings, targets)
+    
+    return(embeddings, model, train_loader)
