@@ -84,8 +84,10 @@ class BasicBlock(nn.Module):
         return(x)
 
 class SDAE(nn.Module):
-    def __init__(self, input_shape, hidden_layers, activation='relu', last_activation='relu', noise_type='dropout', noise_arg=0.2):
+    def __init__(self, features, input_shape, hidden_layers, activation='relu', last_activation='relu', noise_type='dropout', noise_arg=0.2):
         super().__init__()
+        self.features = features
+
         self.inputs = [input_shape] + hidden_layers
         
         n = len(self.inputs)
@@ -99,8 +101,8 @@ class SDAE(nn.Module):
         
         self.decoder = nn.Sequential(*decoder_units)
         
-    def forward(self, features):
-        encoded = self.encoder(features)
+    def forward(self, idx):
+        encoded = self.encoder(self.features[idx])
         
         decoded = self.decoder(encoded)
         

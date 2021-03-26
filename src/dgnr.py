@@ -45,6 +45,12 @@ def normalize(M):
 
     return M
 
+def zero_one_normalisation(matrix, e=1e-5):
+    M = np.max(matrix)
+    m = np.min(matrix)
+    r = (matrix-m) / (M-m + e)
+    return(r)
+
 def PCO(A, K, alpha):
     """
     For a graph represented by its adjacency matrix *A*, computes the co-occurence matrix by random 
@@ -99,7 +105,12 @@ def sdae(input_net, input_number, hidden_layers, n_epochs=100, batch_size=1, act
     #  use gpu if available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = SDAE(input_number, hidden_layers, activation=activation, last_activation=last_activation).to(device)
+    normalized_input_net = zero_one_normalisation(input_net)
+    tensor_net = torch.Tensor(normalized_input_net).to(device)
+    N = tensor_net.size()[0]
+    idx = torch.arange(N).long()
+
+    model = SDAE(tensor_net, input_number, hidden_layers, activation=activation, last_activation=last_activation).to(device)
 
     # create an optimizer object
     # Adam optimizer with learning rate 1e-3
@@ -108,10 +119,9 @@ def sdae(input_net, input_number, hidden_layers, n_epochs=100, batch_size=1, act
     # mean-squared error loss
     criterion = nn.MSELoss()
 
-    summary(model, (input_number,))
+    #summary(model, (input_number,))
     
-    tensor_net = torch.Tensor(input_net).to(device)
-    train = torch.utils.data.TensorDataset(tensor_net, tensor_net)
+    train = torch.utils.data.TensorDataset(idx, idx)
     train_loader = torch.utils.data.DataLoader(train, batch_size=batch_size, shuffle=False)
 
     for epoch in range(n_epochs):  # loop over the dataset multiple times
@@ -119,16 +129,17 @@ def sdae(input_net, input_number, hidden_layers, n_epochs=100, batch_size=1, act
         running_loss = 0.0
         for i, data in enumerate(train_loader, 0):
             # get the inputs; data is a list of [inputs, labels]
-            inputs, labels = data
+            idx, _ = data
             
-            inputs=inputs.to(device)
-            
-            inputs=torch.flatten(inputs)
+            idx=idx.long().to(device)
+            inputs=tensor_net[idx]
+
+            #inputs=torch.flatten(inputs)
             # zero the parameter gradients
             optimizer.zero_grad()
 
             # forward + backward + optimize
-            outputs = model(inputs)
+            outputs = model(idx)
         
             loss = criterion(outputs, inputs)
             loss.backward()
@@ -136,38 +147,39 @@ def sdae(input_net, input_number, hidden_layers, n_epochs=100, batch_size=1, act
 
             # print statistics
             running_loss += loss.item()
-            if i % input_number == input_number-1: 
-                print('[%d, %5d] loss: %.3f' %
+
+        print('[%d, %5d] loss: %.5f' %
                       (epoch + 1, i + 1, running_loss / input_number))
-                running_loss = 0.0
 
     print('Finished Training')
     
-    return(model, train_loader)
+    return(model, train_loader, tensor_net)
 
 def get_embeddings(train_loader, N, model, size_encoded=100):
     trainiter = iter(train_loader)
     embeddings = np.zeros((N, size_encoded))
 
     for i,q in enumerate(trainiter):
-        embedded = model.encoder(q[0]).cpu().detach().numpy()
-        embeddings[i,:] = embedded.reshape((size_encoded,))
+        idx = q[0]
+        for j in idx:
+            embedded = model.encoder(model.features[j]).cpu().detach().numpy()
+            embeddings[j,:] = embedded.reshape((size_encoded,))
     
     return(embeddings)
     
 @timeit
 def dngr_pipeline(network, N, hidden_layers, K=10, alpha=0.2, n_epochs=100, batch_size=1, activation='sigmoid', last_activation='sigmoid'):
     ppmi_net = PPMI(PCO(network, K, alpha))
-    model, train_loader = sdae(ppmi_net, N, hidden_layers, n_epochs=n_epochs, batch_size=batch_size, activation=activation, last_activation=last_activation)
+    model, train_loader, tensor_net = sdae(ppmi_net, N, hidden_layers, n_epochs=n_epochs, batch_size=batch_size, activation=activation, last_activation=last_activation)
     
     print("[*] Visualizing an example's output...")
     trainiter = iter(train_loader)
-    inputs, _ = trainiter.next()
+    idx, _ = trainiter.next()
 
-    print(inputs)
-    print(model(inputs))
+    print(tensor_net[idx])
+    print(model(idx))
 
-    print(mean_squared_error(inputs.cpu().detach().numpy(), model(inputs).cpu().detach().numpy()))
+    print(mean_squared_error(tensor_net[idx].cpu().detach().numpy(), model(idx).cpu().detach().numpy()))
     
     print("[*] Getting the embeddings and visualizing t-SNE...")
     embeddings=get_embeddings(train_loader, N, model, size_encoded=hidden_layers[-1])

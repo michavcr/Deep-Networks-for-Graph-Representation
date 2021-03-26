@@ -20,6 +20,8 @@ import matplotlib.pyplot as plt
 
 from sklearn.metrics import roc_auc_score, accuracy_score
 
+from scipy.spatial.distance import pdist, squareform
+
 def compute_auc(P,S):
     y_pred = S.clone().detach()
 
@@ -67,3 +69,13 @@ def visualize_TSNE(embeddings,target):
 
     return
 
+def compute_similarity(net):
+    M = 1 - pdist(net, metric='Jaccard')
+    M = squareform(M)
+    M = M + np.eye(*M.shape)
+    M[np.isnan(M)] = 0.
+
+    return(M)
+
+def readnet(net_path):
+	return(np.genfromtxt(net_path,delimiter='\t'))

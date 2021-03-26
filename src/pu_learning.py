@@ -42,24 +42,47 @@ def get_train_test_masks(P, train_size=0.8):
     neg_test = torch.logical_and(test, Ineg)
 
     return(pos_train, neg_train, pos_test, neg_test)
-    
+
+class CustomMSELoss(nn.Module):
+    def __init__(self, alpha=0.2):
+        super(CustomMSELoss, self).__init__()
+        self.alpha=alpha
+
+    def forward(self, inputs, targets):
+        #comment out if your model contains a sigmoid or equivalent activation layer
+        neg_mask = (targets == 0.)
+        
+        M = (targets-inputs)**2
+        M[neg_mask] *= self.alpha
+
+        loss_res = torch.mean(M)
+
+        return loss_res
+
 class PU_Learner(nn.Module):
-    def __init__(self, k, Fd, Ft, activation='identity'):
+    def __init__(self, k, Fd, Ft, X, Y, Nd, Nt, activation='identity'):
         super().__init__()
         self.k = k
         self.Fd = Fd
         self.Ft = Ft
-
-        self.H = torch.nn.Parameter(torch.randn(Fd, k))
-        self.W = torch.nn.Parameter(torch.randn(k, Ft))
         
+        self.H = torch.nn.Parameter(torch.randn(Fd, k)*1/sqrt(k))
+        self.W = torch.nn.Parameter(torch.randn(k, Ft)*1/sqrt(k))
+        self.b_x = torch.nn.Parameter(torch.randn(Nd))
+        self.b_y = torch.nn.Parameter(torch.randn(Nt))
+
+        self.X = (X - X.mean(0))/(X.std(0)+1e-7)
+        self.Y = (Y - Y.mean(0))/(Y.std(0)+1e-7)
+
         activ_dict = {'sigmoid': torch.nn.Sigmoid, 'identity': torch.nn.Identity}
         self.activation = activ_dict[activation]()
 
-    def forward(self, x, y):
-    	  return(self.activation(torch.einsum('ij,jk,kl,li->i', x, self.H, self.W, torch.transpose(y, 1, 0))))
+    def forward(self, id_x, id_y):
+    	dot = torch.einsum('ij,jk,kl,li->i', self.X[id_x], self.H, self.W, torch.transpose(self.Y[id_y], 1, 0))
 
-def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-3, print_step=4, train_size=0.8):
+    	return(self.activation(dot + self.b_x[id_x] + self.b_y[id_y]))
+
+def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-3, train_size=0.8, alpha=1.0, gamma=0.):
     #hidden_layers=[500,200,100]
     #input_numer=784
     #  use gpu if available
@@ -74,7 +97,7 @@ def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-3, print_ste
     N_variables = Fd * k + Ft * k
     N_examples = Nd*Nt
 
-    cartesian_product = torch.Tensor([[u, v] for u in x for v in y]).to(device)
+    cartesian_product = torch.Tensor([[i, j] for i in range(Nd) for j in range(Nt)]).long().to(device)
 
     x = torch.Tensor(x).to(device)
     y = torch.Tensor(y).to(device)
@@ -101,14 +124,14 @@ def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-3, print_ste
     print("Number of positive examples in train set:", P[pos_train].size()[0])
     print("Number of negative/unlabelled examples in train set:", P[neg_train].size()[0])
 
-    model = PU_Learner(k, Fd, Ft).to(device)
+    model = PU_Learner(k, Fd, Ft, x, y, Nd, Nt, activation='sigmoid').to(device)
 
     # create an optimizer object
     # Adam optimizer with learning rate 1e-3
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=gamma)
 
     # mean-squared error loss
-    criterion = nn.MSELoss()
+    criterion = CustomMSELoss(alpha=alpha)
 
     for epoch in range(n_epochs):  # loop over the dataset multiple times
 
@@ -119,22 +142,27 @@ def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-3, print_ste
             
             inputs=inputs.to(device)
             
-            x_batch, y_batch = inputs[:,0,:], inputs[:,1,:]
+            id_x_batch, id_y_batch = inputs[:,0], inputs[:,1]
 
             # zero the parameter gradients
             optimizer.zero_grad()
 
             # forward + backward + optimize
-            outputs = model(x_batch, y_batch)
+            outputs = model(id_x_batch, id_y_batch)
             
-            loss = torch.sqrt(criterion(outputs, labels))
+            loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
 
             # print statistics
             running_loss += loss.item()
         
-        S = torch.chain_matmul(x, model.H, model.W, torch.transpose(y,0,1))
+        S = torch.sigmoid(torch.chain_matmul(model.X, model.H, model.W, torch.transpose(model.Y,0,1)) + model.b_x.unsqueeze(-1).expand(-1,Nt) + model.b_y.expand(Nd,-1))
+        """print(S)
+        print(model.H)
+        print(model.W)
+        print(model.b_x)
+        print(model.b_y)"""
         auc = compute_auc(P[train_mask].clone(), S[train_mask].clone())
         acc = compute_accuracy(P[train_mask].clone(), S[train_mask].clone())
 
@@ -146,6 +174,23 @@ def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-3, print_ste
     print("Now computing Z=HW^T, then will compute S...")
     
     print(x.size(), model.H.size(), model.W.size(), y.size())
-    S = torch.chain_matmul(x, model.H, model.W, torch.transpose(y,0,1))
+    S = torch.sigmoid(torch.chain_matmul(model.X, model.H, model.W, torch.transpose(model.Y,0,1))  + model.b_x.unsqueeze(-1).expand(-1,Nt) + model.b_y.expand(Nd,-1))
     
-    return(S, model.H, model.W, train_mask, ~train_mask)  
+    return(S, model.H, model.W, model.b_x, model.b_y, train_mask, ~train_mask)  
+
+def eval_test_set(P, S, test):
+    print("Evaluation on the test set...")
+    print("Test set statistics:")
+    n_pos = int(P[test].sum().item())
+    n_neg = int((1-P[test]).sum().item())
+
+    print("Number of positive examples:", n_pos)
+    print("Number of negative/unlabelled examples:", n_neg)
+    
+    auc = compute_auc(P[test],S[test])
+    acc = compute_accuracy(P[test],S[test])
+
+    print("\nROC auc: %f" % compute_auc(P, S))
+    print("Accuracy: %f" % compute_accuracy(P, S))
+
+    return(auc,acc)

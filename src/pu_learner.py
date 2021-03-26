@@ -151,7 +151,9 @@ def pu_learning(x, y, P, pos_train_mask, neg_train_mask, k = 7, alpha = 0.2, gam
         obj.backward() 
         opt.step()
         if i%1000==0:  
-            print("Objective: ", obj)
+            S = torch.chain_matmul(x, H, torch.transpose(W,0,1), torch.transpose(y,0,1))
+            auc = compute_auc(P[train_mask],S[train_mask])
+            print("Objective:", obj, "(auc:", auc, ")")
 
     print("\n\nSolved.")
     
