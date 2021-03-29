@@ -22,7 +22,7 @@ from utils import *
 from random_graphs import *
 from dgnr import *
 
-def get_train_test_masks(P, train_size=0.8):
+def get_train_test_masks(P, train_size=0.8, test_balance=True):
     P = torch.Tensor(P)
     Ipos = (P == 1.)
     Ineg = (P == 0.)
@@ -37,16 +37,31 @@ def get_train_test_masks(P, train_size=0.8):
     neg_train = neg_train < train_neg_rel_size
 
     train = pos_train + neg_train
-    test = ~train
-    pos_test = torch.logical_and(test, Ipos)
-    neg_test = torch.logical_and(test, Ineg)
+
+    if not test_balance:
+        test = ~train
+        pos_test = torch.logical_and(test, Ipos)
+        neg_test = torch.logical_and(test, Ineg)
+    else:
+        test = ~train
+        pos_test = torch.logical_and(test,Ipos)
+        neg_test = torch.logical_and(test, Ineg)
+
+        num_pos_test = torch.sum(pos_test)
+        test_neg_rel_size = num_pos_test / torch.sum(neg_test)
+        
+        neg_test = neg_test * torch.rand(P.size())
+        neg_test[train] = 1.
+        neg_test[Ipos] = 1.
+        
+        neg_test = neg_test < test_neg_rel_size
 
     return(pos_train, neg_train, pos_test, neg_test)
 
 class CustomMSELoss(nn.Module):
     def __init__(self, alpha=0.2):
         super(CustomMSELoss, self).__init__()
-        self.alpha=alpha
+        self.alpha=sqrt(alpha)
 
     def forward(self, inputs, targets):
         #comment out if your model contains a sigmoid or equivalent activation layer
@@ -82,7 +97,7 @@ class PU_Learner(nn.Module):
 
     	return(self.activation(dot + self.b_x[id_x] + self.b_y[id_y]))
 
-def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-3, train_size=0.8, alpha=1.0, gamma=0.):
+def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-3, train_size=0.8, alpha=1.0, gamma=0., test_balance=True):
     #hidden_layers=[500,200,100]
     #input_numer=784
     #  use gpu if available
@@ -103,12 +118,12 @@ def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-3, train_siz
     y = torch.Tensor(y).to(device)
 
     print("Spliting train and test sets...")
-    pos_train, neg_train, pos_test, neg_test = get_train_test_masks(P, train_size=train_size)
+    pos_train, neg_train, pos_test, neg_test = get_train_test_masks(P, train_size=train_size, test_balance=test_balance)
 
     P = torch.Tensor(P).to(device)
 
     train_mask = torch.logical_or(pos_train, neg_train)
-
+    test_mask = torch.logical_or(pos_test, neg_test)
     flat_train_mask = train_mask.flatten()
 
     print("Building the train loader...")
@@ -176,7 +191,7 @@ def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-3, train_siz
     print(x.size(), model.H.size(), model.W.size(), y.size())
     S = torch.sigmoid(torch.chain_matmul(model.X, model.H, model.W, torch.transpose(model.Y,0,1))  + model.b_x.unsqueeze(-1).expand(-1,Nt) + model.b_y.expand(Nd,-1))
     
-    return(S, model.H, model.W, model.b_x, model.b_y, train_mask, ~train_mask)  
+    return(S, model.H, model.W, model.b_x, model.b_y, train_mask, test_mask)
 
 def eval_test_set(P, S, test):
     print("Evaluation on the test set...")
@@ -190,7 +205,7 @@ def eval_test_set(P, S, test):
     auc = compute_auc(P[test],S[test])
     acc = compute_accuracy(P[test],S[test])
 
-    print("\nROC auc: %f" % compute_auc(P, S))
-    print("Accuracy: %f" % compute_accuracy(P, S))
+    print("\nROC auc: %f" % auc)
+    print("Accuracy: %f" % acc)
 
     return(auc,acc)
