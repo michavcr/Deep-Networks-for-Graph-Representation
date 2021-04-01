@@ -1,26 +1,24 @@
 import numpy as np
 import torch
-import torch.autograd as ag
-import torch.nn as nn
-import torch.optim as optim
-from torchsummary import summary
-import torchvision
-import torchvision.transforms as transforms
-import torchvision.datasets as datasets
-
-from scipy.optimize import minimize, NonlinearConstraint
-import random
-from sklearn.metrics import mean_squared_error
-
-from math import sqrt
 import time
 from sklearn.manifold import TSNE
 
 import matplotlib.pyplot as plt
 
-from sklearn.metrics import roc_auc_score, accuracy_score
+from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix
 
 from scipy.spatial.distance import pdist, squareform
+
+def compute_confusion_matrix(P,S):
+    y_pred = y_pred.clone().detach()
+
+    y_pred[y_pred >= 0.5] = 1.
+    y_pred[y_pred < 0.5] = 0.
+
+    y_pred = y_pred.cpu().detach().numpy().reshape((-1,))
+    y_true = y_true.cpu().detach().numpy().reshape((-1,))
+
+    return(confusion_matrix(y_true, y_pred))
 
 def compute_auc(P,S):
     y_pred = S.clone().detach()
@@ -79,3 +77,27 @@ def compute_similarity(net):
 
 def readnet(net_path):
 	return(np.genfromtxt(net_path,delimiter='\t'))
+
+def extract_samples(K, tensor):
+    """
+    Extract K random samples from tensor.
+
+    Parameters
+    ----------
+    K : int
+        Wanted number of samples
+    tensor : tensor of any size
+        tensor from which extract the samples 
+        (the first dimension will be considered as the sample dim)
+
+    Returns
+    -------
+    samples : tensor of same type as the tensor parameter of shape (K,...)
+        the K samples extracted from tensor
+
+    """
+    perm = torch.randperm(tensor.size(0))
+    idx = perm[:K]
+    samples = tensor[idx]
+    
+    return (samples)

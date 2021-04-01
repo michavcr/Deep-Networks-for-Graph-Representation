@@ -1,21 +1,9 @@
-import numpy as np
 import torch
-import torch.autograd as ag
 import torch.nn as nn
 import torch.optim as optim
-from torchsummary import summary
-import torchvision
-import torchvision.transforms as transforms
-import torchvision.datasets as datasets
-
-from scipy.optimize import minimize, NonlinearConstraint
-import random
-
-import matplotlib.pyplot as plt
-from sklearn.metrics import mean_squared_error
 
 from math import sqrt
-import time
+from sklearn.model_selection import KFold
 
 from autoencoder import *
 from utils import *
@@ -97,7 +85,7 @@ class PU_Learner(nn.Module):
 
     	return(self.activation(dot + self.b_x[id_x] + self.b_y[id_y]))
 
-def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-3, train_size=0.8, alpha=1.0, gamma=0., test_balance=True):
+def pu_learning(k, x, y, P, pos_train, neg_train, pos_test, neg_test, n_epochs=100, batch_size=100, lr=1e-3, alpha=1.0, gamma=0.):
     #hidden_layers=[500,200,100]
     #input_numer=784
     #  use gpu if available
@@ -110,15 +98,11 @@ def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-3, train_siz
     
     #Number of variables
     N_variables = Fd * k + Ft * k
-    N_examples = Nd*Nt
 
     cartesian_product = torch.Tensor([[i, j] for i in range(Nd) for j in range(Nt)]).long().to(device)
 
     x = torch.Tensor(x).to(device)
     y = torch.Tensor(y).to(device)
-
-    print("Spliting train and test sets...")
-    pos_train, neg_train, pos_test, neg_test = get_train_test_masks(P, train_size=train_size, test_balance=test_balance)
 
     P = torch.Tensor(P).to(device)
 
@@ -193,6 +177,73 @@ def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-3, train_siz
     
     return(S, model.H, model.W, model.b_x, model.b_y, train_mask, test_mask)
 
+def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-3, train_size=0.8, alpha=1.0, gamma=0., test_balance=True):
+    print("Spliting train and test sets...")
+    pos_train, neg_train, pos_test, neg_test = get_train_test_masks(P, train_size=train_size, test_balance=test_balance)
+    
+    return(pu_learning(k, x, y, P, pos_train, neg_train, pos_test, neg_test, 
+                       n_epochs=n_epochs, batch_size=batch_size, lr=lr, 
+                       alpha=alpha, gamma=gamma))
+
+def cross_validate(k, x, y, P, N_folds, n_epochs=100, batch_size=100, lr=1e-3, train_size=0.8, alpha=1.0, gamma=0.):
+    pos_mask = (P==1)
+    neg_mask = (P==0)
+    
+    N_pos = pos_mask.sum()
+    N_neg = neg_mask.sum()
+    
+    N = min(N_pos, N_neg)
+    
+    pos_idx = pos_mask.nonzero()
+    neg_idx = neg_mask.nonzero()
+    
+    pos_idx = extract_samples(N, pos_idx)
+    neg_idx = extract_samples(N, neg_idx)
+    
+    kfold = KFold(n_splits=N_folds, shuffle=False)
+    
+    kfold_pos = kfold.split(pos_idx)
+    kfold_neg = kfold.split(neg_idx)
+    
+    S_auc = 0
+    S_acc = 0
+    
+    for fold in range(N_folds):
+        print("Fold %d" % fold)
+        print("Preparing the masks...")
+        pos_train_idx = kfold_pos[fold][0]
+        pos_test_idx = kfold_pos[fold][1]
+        neg_train_idx = kfold_neg[fold][0]
+        neg_test_idx = kfold_neg[fold][1]
+        
+        pos_train_mask = torch.zeros(pos_mask.size(),dtype=bool)
+        pos_train_mask[pos_train_idx] = True
+        
+        pos_test_mask = torch.zeros(pos_mask.size(),dtype=bool)
+        pos_test_mask[pos_test_idx] = True
+        
+        neg_train_mask = torch.zeros(neg_mask.size(),dtype=bool)
+        neg_train_mask[neg_train_idx] = True
+        
+        neg_test_mask = torch.zeros(neg_mask.size(),dtype=bool)
+        neg_test_mask[neg_test_idx] = True
+        
+        test_mask = torch.logical_or(pos_test_mask, neg_test_mask)
+        
+        print("Starting to learn...")
+        S, H, W, b_x, b_y, _, _ = pu_learning(k, x, y, P, 
+                                              pos_train_mask, neg_train_mask, pos_test_mask, neg_test_mask, 
+                                              n_epochs=n_epochs, batch_size=batch_size, lr=lr, 
+                                              alpha=alpha, gamma=gamma)
+        
+        print("Evaluating on test set...")
+        auc, acc, _ = eval_test_set(P, S, test_mask)
+        
+        S_auc += auc
+        S_acc += acc
+    
+    return(S_auc/N_folds, S_acc/N_folds)
+
 def eval_test_set(P, S, test):
     print("Evaluation on the test set...")
     print("Test set statistics:")
@@ -204,8 +255,11 @@ def eval_test_set(P, S, test):
     
     auc = compute_auc(P[test],S[test])
     acc = compute_accuracy(P[test],S[test])
-
+    confusion = compute_confusion_matrix(P[test], S[test])
+    
     print("\nROC auc: %f" % auc)
     print("Accuracy: %f" % acc)
-
-    return(auc,acc)
+    print("Confusion matrix:")
+    print(confusion)
+    
+    return(auc,acc,confusion)
