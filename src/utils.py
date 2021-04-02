@@ -5,11 +5,22 @@ from sklearn.manifold import TSNE
 
 import matplotlib.pyplot as plt
 
-from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix
+from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix, average_precision_score
 
 from scipy.spatial.distance import pdist, squareform
 
-def compute_confusion_matrix(P,S):
+def compute_pr_auc(P,S):
+    y_pred = S.clone().detach()
+
+    y_pred[y_pred < 0.] = 0.
+    y_pred[y_pred > 1.] = 1.
+    
+    y_pred = S.cpu().detach().numpy().reshape((-1,))
+    y_true = P.cpu().detach().numpy().reshape((-1,))
+
+    return(average_precision_score(y_true, y_pred))
+
+def compute_confusion_matrix(y_true, y_pred):
     y_pred = y_pred.clone().detach()
 
     y_pred[y_pred >= 0.5] = 1.

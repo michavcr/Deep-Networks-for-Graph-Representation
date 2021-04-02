@@ -177,7 +177,7 @@ def pu_learning(k, x, y, P, pos_train, neg_train, pos_test, neg_test, n_epochs=1
     
     return(S, model.H, model.W, model.b_x, model.b_y, train_mask, test_mask)
 
-def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-3, train_size=0.8, alpha=1.0, gamma=0., test_balance=True):
+def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-5, train_size=0.8, alpha=1.0, gamma=0., test_balance=True):
     print("Spliting train and test sets...")
     pos_train, neg_train, pos_test, neg_test = get_train_test_masks(P, train_size=train_size, test_balance=test_balance)
     
@@ -185,7 +185,7 @@ def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-3, train_siz
                        n_epochs=n_epochs, batch_size=batch_size, lr=lr, 
                        alpha=alpha, gamma=gamma))
 
-def cross_validate(k, x, y, P, N_folds, n_epochs=100, batch_size=100, lr=1e-3, train_size=0.8, alpha=1.0, gamma=0.):
+def cross_validate(k, x, y, P, N_folds, n_epochs=100, batch_size=100, lr=1e-5, train_size=0.8, alpha=1.0, gamma=0.):
     pos_mask = (P==1)
     neg_mask = (P==0)
     
@@ -202,31 +202,35 @@ def cross_validate(k, x, y, P, N_folds, n_epochs=100, batch_size=100, lr=1e-3, t
     
     kfold = KFold(n_splits=N_folds, shuffle=False)
     
-    kfold_pos = kfold.split(pos_idx)
-    kfold_neg = kfold.split(neg_idx)
+    kfold_pos = list(kfold.split(pos_idx))
+    kfold_neg = list(kfold.split(neg_idx))
     
     S_auc = 0
     S_acc = 0
+    S_pr = 0
     
+    S_sol = 0
+
     for fold in range(N_folds):
-        print("Fold %d" % fold)
+        print("Fold %d" % (fold+1))
         print("Preparing the masks...")
-        pos_train_idx = kfold_pos[fold][0]
-        pos_test_idx = kfold_pos[fold][1]
-        neg_train_idx = kfold_neg[fold][0]
-        neg_test_idx = kfold_neg[fold][1]
+        pos_train_idx = pos_idx[kfold_pos[fold][0]]
+        #print(pos_train_idx.max(0))
+        pos_test_idx = pos_idx[kfold_pos[fold][1]]
+        neg_train_idx = neg_idx[kfold_neg[fold][0]]
+        neg_test_idx = neg_idx[kfold_neg[fold][1]]
         
         pos_train_mask = torch.zeros(pos_mask.size(),dtype=bool)
-        pos_train_mask[pos_train_idx] = True
+        pos_train_mask[pos_train_idx[:,0],pos_train_idx[:,1]] = True
         
         pos_test_mask = torch.zeros(pos_mask.size(),dtype=bool)
-        pos_test_mask[pos_test_idx] = True
+        pos_test_mask[pos_test_idx[:,0],pos_test_idx[:,1]] = True
         
         neg_train_mask = torch.zeros(neg_mask.size(),dtype=bool)
-        neg_train_mask[neg_train_idx] = True
+        neg_train_mask[neg_train_idx[:,0],neg_train_idx[:,1]] = True
         
         neg_test_mask = torch.zeros(neg_mask.size(),dtype=bool)
-        neg_test_mask[neg_test_idx] = True
+        neg_test_mask[neg_test_idx[:,0],neg_test_idx[:,1]] = True
         
         test_mask = torch.logical_or(pos_test_mask, neg_test_mask)
         
@@ -237,12 +241,15 @@ def cross_validate(k, x, y, P, N_folds, n_epochs=100, batch_size=100, lr=1e-3, t
                                               alpha=alpha, gamma=gamma)
         
         print("Evaluating on test set...")
-        auc, acc, _ = eval_test_set(P, S, test_mask)
+        auc, pr, acc, _ = eval_test_set(P, S, test_mask)
         
         S_auc += auc
         S_acc += acc
-    
-    return(S_auc/N_folds, S_acc/N_folds)
+        S_pr += pr
+
+        S_sol += S * auc
+
+    return(S_sol/S_auc, S_auc/N_folds, S_pr/N_folds, S_acc/N_folds)
 
 def eval_test_set(P, S, test):
     print("Evaluation on the test set...")
@@ -254,12 +261,14 @@ def eval_test_set(P, S, test):
     print("Number of negative/unlabelled examples:", n_neg)
     
     auc = compute_auc(P[test],S[test])
+    pr = compute_pr_auc(P[test], S[test])
     acc = compute_accuracy(P[test],S[test])
     confusion = compute_confusion_matrix(P[test], S[test])
     
     print("\nROC auc: %f" % auc)
+    print("PR auc: %f" % pr)
     print("Accuracy: %f" % acc)
     print("Confusion matrix:")
     print(confusion)
     
-    return(auc,acc,confusion)
+    return(auc,pr,acc,confusion)
