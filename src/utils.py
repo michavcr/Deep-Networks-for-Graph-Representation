@@ -68,13 +68,14 @@ def timeit(method):
         return result
     return timed
 
-def visualize_TSNE(embeddings,target):
+def visualize_TSNE(embeddings,target, labels=None):
     tsne = TSNE(n_components=2, init='pca',
                          random_state=0, perplexity=30)
     data = tsne.fit_transform(embeddings)
     #plt.figure(figsize=(12, 6))
     plt.title("TSNE visualization of the embeddings")
-    plt.scatter(data[:,0],data[:,1],c=target)
+    scatter = plt.scatter(data[:,0],data[:,1],c=target)
+    plt.legend(handles=scatter.legend_elements()[0], labels=labels)
 
     return
 
