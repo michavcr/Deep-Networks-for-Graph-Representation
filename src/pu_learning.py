@@ -63,7 +63,7 @@ class CustomMSELoss(nn.Module):
         return loss_res
 
 class PU_Learner(nn.Module):
-    def __init__(self, k, Fd, Ft, X, Y, Nd, Nt, activation='identity'):
+    def __init__(self, k, Fd, Ft, X, Y, Nd, Nt, activation='identity', has_bias=False):
         super().__init__()
         self.k = k
         self.Fd = Fd
@@ -71,8 +71,12 @@ class PU_Learner(nn.Module):
         
         self.H = torch.nn.Parameter(torch.randn(Fd, k)*1/sqrt(k))
         self.W = torch.nn.Parameter(torch.randn(k, Ft)*1/sqrt(k))
-        self.b_x = torch.nn.Parameter(torch.randn(Nd))
-        self.b_y = torch.nn.Parameter(torch.randn(Nt))
+        if not has_bias:
+            self.b_x = torch.zeros(Nd)
+            self.b_y = torch.zeros(Nt)
+        else:
+            self.b_x = torch.nn.Parameter(torch.randn(Nd))
+            self.b_y = torch.nn.Parameter(torch.randn(Nt))
 
         self.X = (X - X.mean(0))/(X.std(0)+1e-7)
         self.Y = (Y - Y.mean(0))/(Y.std(0)+1e-7)
@@ -85,7 +89,7 @@ class PU_Learner(nn.Module):
 
     	return(self.activation(dot + self.b_x[id_x] + self.b_y[id_y]))
 
-def pu_learning(k, x, y, P, pos_train, neg_train, pos_test, neg_test, n_epochs=100, batch_size=100, lr=1e-3, alpha=1.0, gamma=0.):
+def pu_learning(k, x, y, P, pos_train, neg_train, pos_test, neg_test, n_epochs=100, batch_size=100, lr=1e-3, alpha=1.0, gamma=0., activation='identity'):
     #hidden_layers=[500,200,100]
     #input_numer=784
     #  use gpu if available
@@ -123,7 +127,7 @@ def pu_learning(k, x, y, P, pos_train, neg_train, pos_test, neg_test, n_epochs=1
     print("Number of positive examples in train set:", P[pos_train].size()[0])
     print("Number of negative/unlabelled examples in train set:", P[neg_train].size()[0])
 
-    model = PU_Learner(k, Fd, Ft, x, y, Nd, Nt, activation='sigmoid').to(device)
+    model = PU_Learner(k, Fd, Ft, x, y, Nd, Nt, activation=activation).to(device)
 
     # create an optimizer object
     # Adam optimizer with learning rate 1e-3
@@ -156,7 +160,7 @@ def pu_learning(k, x, y, P, pos_train, neg_train, pos_test, neg_test, n_epochs=1
             # print statistics
             running_loss += loss.item()
         
-        S = torch.sigmoid(torch.chain_matmul(model.X, model.H, model.W, torch.transpose(model.Y,0,1)) + model.b_x.unsqueeze(-1).expand(-1,Nt) + model.b_y.expand(Nd,-1))
+        S = model.activation(torch.chain_matmul(model.X, model.H, model.W, torch.transpose(model.Y,0,1)) + model.b_x.unsqueeze(-1).expand(-1,Nt) + model.b_y.expand(Nd,-1))
         """print(S)
         print(model.H)
         print(model.W)
@@ -173,19 +177,19 @@ def pu_learning(k, x, y, P, pos_train, neg_train, pos_test, neg_test, n_epochs=1
     print("Now computing Z=HW^T, then will compute S...")
     
     print(x.size(), model.H.size(), model.W.size(), y.size())
-    S = torch.sigmoid(torch.chain_matmul(model.X, model.H, model.W, torch.transpose(model.Y,0,1))  + model.b_x.unsqueeze(-1).expand(-1,Nt) + model.b_y.expand(Nd,-1))
+    S = model.activation(torch.chain_matmul(model.X, model.H, model.W, torch.transpose(model.Y,0,1))  + model.b_x.unsqueeze(-1).expand(-1,Nt) + model.b_y.expand(Nd,-1))
     
     return(S, model.H, model.W, model.b_x, model.b_y, train_mask, test_mask)
 
-def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-5, train_size=0.8, alpha=1.0, gamma=0., test_balance=True):
+def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-5, train_size=0.8, alpha=1.0, gamma=0., test_balance=True, activation='identity'):
     print("Spliting train and test sets...")
     pos_train, neg_train, pos_test, neg_test = get_train_test_masks(P, train_size=train_size, test_balance=test_balance)
     
     return(pu_learning(k, x, y, P, pos_train, neg_train, pos_test, neg_test, 
                        n_epochs=n_epochs, batch_size=batch_size, lr=lr, 
-                       alpha=alpha, gamma=gamma))
+                       alpha=alpha, gamma=gamma, activation=activation))
 
-def cross_validate(k, x, y, P, N_folds, n_epochs=100, batch_size=100, lr=1e-5, train_size=0.8, alpha=1.0, gamma=0.):
+def cross_validate(k, x, y, P, N_folds, n_epochs=100, batch_size=100, lr=1e-5, train_size=0.8, alpha=1.0, gamma=0., activation='identity'):
     pos_mask = (P==1)
     neg_mask = (P==0)
     
@@ -238,7 +242,7 @@ def cross_validate(k, x, y, P, N_folds, n_epochs=100, batch_size=100, lr=1e-5, t
         S, H, W, b_x, b_y, _, _ = pu_learning(k, x, y, P, 
                                               pos_train_mask, neg_train_mask, pos_test_mask, neg_test_mask, 
                                               n_epochs=n_epochs, batch_size=batch_size, lr=lr, 
-                                              alpha=alpha, gamma=gamma)
+                                              alpha=alpha, gamma=gamma, activation=activation)
         
         print("Evaluating on test set...")
         auc, pr, acc, _ = eval_test_set(P, S, test_mask)
