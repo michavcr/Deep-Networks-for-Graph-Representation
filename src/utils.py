@@ -10,6 +10,21 @@ from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix, ave
 from scipy.spatial.distance import pdist, squareform
 
 def compute_pr_auc(P,S):
+    """
+    Compute the prediction-recall AUC.
+
+    Parameters
+    ----------
+    P : torch Tensor
+        Ground truth.
+    S : torch Tensor
+        Predictions.
+
+    Returns
+    -------
+    The precision-recall AUC.
+
+    """
     y_pred = S.clone().detach()
 
     y_pred[y_pred < 0.] = 0.
@@ -21,6 +36,21 @@ def compute_pr_auc(P,S):
     return(average_precision_score(y_true, y_pred))
 
 def compute_confusion_matrix(y_true, y_pred):
+    """
+    Compute the confusion matrix.
+
+    Parameters
+    ----------
+    y_true : torch Tensor
+        Ground truth.
+    y_pred : TYPE
+        Predictions.
+
+    Returns
+    -------
+    The confusion matrix.
+
+    """
     y_pred = y_pred.clone().detach()
 
     y_pred[y_pred >= 0.5] = 1.
@@ -32,6 +62,22 @@ def compute_confusion_matrix(y_true, y_pred):
     return(confusion_matrix(y_true, y_pred))
 
 def compute_auc(P,S):
+    """
+    Compute the ROC AUC.
+
+    Parameters
+    ----------
+    P : torch Tensor
+        Ground truth.
+    S : TYPE
+        Predictions.
+
+    Returns
+    -------
+    The ROC AUC.
+
+    """
+
     y_pred = S.clone().detach()
 
     y_pred[y_pred < 0.] = 0.
@@ -43,6 +89,22 @@ def compute_auc(P,S):
     return(roc_auc_score(y_true, y_pred))
 
 def compute_accuracy(y_true, y_pred):
+    """
+    Compute the accuracy.
+
+    Parameters
+    ----------
+    y_true : torch Tensor
+        Ground truth.
+    y_pred : TYPE
+        Predictions.
+
+    Returns
+    -------
+    The accuracy.
+
+    """
+
     y_pred = y_pred.clone().detach()
 
     y_pred[y_pred >= 0.5] = 1.

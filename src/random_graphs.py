@@ -18,9 +18,19 @@ from math import sqrt
 import time
 
 def random_graph(p, size=(100,100)):
+    """
+    Generate a random bipartite graph of size (size[0], size[1]), with a 
+    probability p to have connections on each pair of nodes. It returns
+    an adjacency matrix.
+    """
     return(np.array([[int(random.random() < p) for i in range(size[1])] for j in range(size[0])]))
 
 def random_undirected_graph(p, size=(100,100)):
+    """
+    Same as random_graph but it makes sure that the returned graph is 
+    undirected.
+    """
+    
     graph = random_graph(p, size=size)
     graph[np.arange(size[0]),np.arange(size[1])]=0 #nullify the diagonal
     graph = np.maximum(graph, graph.T) #make it symmetric
@@ -28,6 +38,9 @@ def random_undirected_graph(p, size=(100,100)):
     return(graph)
 
 def random_graph_with_fixed_components(p, nodes_per_component=[50,50]):
+    """
+    Produce a random graph with components of chosen sizes.
+    """
     nodes_per_component = np.array(nodes_per_component)
     n_nodes = nodes_per_component.sum()
     n_cmp = nodes_per_component.shape[0]
@@ -52,9 +65,16 @@ def random_graph_with_fixed_components(p, nodes_per_component=[50,50]):
     return(graph)
 
 def neighbors(adj, i):
+    """
+    Given an unweighted adjacency matrix, returns a node i's neighbors.
+    """
     return (np.where(adj[i,:]==1)[0])
 
 def dfs(adj, i):
+    """
+    Depth First Search, starting from node i.
+
+    """
     n = adj.shape[0] #number of nodes in the graph
     visited = [False for k in range(n)]
     
@@ -72,6 +92,10 @@ def dfs(adj, i):
     return(np.where(visited))
 
 def connected_components(adj):
+    """
+    Returns components of a given grah (via its adjacency matrix adj).
+
+    """
     n = adj.shape[0]
     
     visited = np.array([0 for k in range(n)])
