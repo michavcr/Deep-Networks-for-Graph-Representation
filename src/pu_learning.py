@@ -300,6 +300,9 @@ def pu_learning(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-5, train_size=0.
                        n_epochs=n_epochs, batch_size=batch_size, lr=lr, 
                        alpha=alpha, gamma=gamma, activation=activation))
 
+#obsolete 
+pu_learning_new = pu_learning
+
 def cross_validate(k, x, y, P, N_folds, n_epochs=100, batch_size=100, lr=1e-5, train_size=0.8, alpha=1.0, gamma=0., activation='identity'):
     """
     Cross validation.
@@ -387,7 +390,7 @@ def cross_validate(k, x, y, P, N_folds, n_epochs=100, batch_size=100, lr=1e-5, t
         test_mask = torch.logical_or(pos_test_mask, neg_test_mask)
         
         print("Starting to learn...")
-        S, H, W, b_x, b_y, _, _ = pu_learning(k, x, y, P, 
+        S, H, W, b_x, b_y, _, _ = pu_learning_base(k, x, y, P, 
                                               pos_train_mask, neg_train_mask, pos_test_mask, neg_test_mask, 
                                               n_epochs=n_epochs, batch_size=batch_size, lr=lr, 
                                               alpha=alpha, gamma=gamma, activation=activation)

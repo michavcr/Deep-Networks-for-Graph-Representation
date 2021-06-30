@@ -202,7 +202,7 @@ def readnet(net_path):
     Read an adjacency matrix in a tsv file.
 
     """
-	return(np.genfromtxt(net_path,delimiter='\t'))
+    return(np.genfromtxt(net_path,delimiter='\t'))
 
 def extract_samples(K, tensor):
     """

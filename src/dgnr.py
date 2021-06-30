@@ -94,7 +94,7 @@ def PPMI(M):
 
 def sdae(input_net, input_number, hidden_layers, n_epochs=100, batch_size=1, activation='sigmoid', last_activation='sigmoid'):
     """
-    Training pipeline for SDAE.
+    Training pipeline for SDAE (stack denoising autoencoder).
 
     Parameters
     ----------
