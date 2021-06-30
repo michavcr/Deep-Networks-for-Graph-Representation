@@ -11,6 +11,24 @@ from random_graphs import *
 from dgnr import *
 
 def get_train_test_masks(P, train_size=0.8, test_balance=True):
+    """
+    Produce train, test masks. 
+
+    Parameters
+    ----------
+    P : TYPE
+        The drug-target network.
+    train_size : TYPE, optional
+        Train size ratio. The default is 0.8.
+    test_balance : TYPE, optional
+        whether test should be balanced between positive and "negative" samples
+        or not. The default is True.
+
+    Returns
+    -------
+    None.
+
+    """
     P = torch.Tensor(P)
     Ipos = (P == 1.)
     Ineg = (P == 0.)
@@ -47,6 +65,9 @@ def get_train_test_masks(P, train_size=0.8, test_balance=True):
     return(pos_train, neg_train, pos_test, neg_test)
 
 class CustomMSELoss(nn.Module):
+    """
+    Custom MSE Loss with a weight < 1 on negative samples.
+    """
     def __init__(self, alpha=0.2):
         super(CustomMSELoss, self).__init__()
         self.alpha=sqrt(alpha)
@@ -64,6 +85,18 @@ class CustomMSELoss(nn.Module):
 
 class PU_Learner(nn.Module):
     def __init__(self, k, Fd, Ft, X, Y, Nd, Nt, activation='identity', has_bias=False):
+        """
+        nn.Module to solve PU Learning problem:
+            Given P, X, Y; find H (shape (Fd, k)), W (shape (k,Ft)) so that:
+               P is approx by X*H*W*Y^T
+            In pratice, we try to solve an optimization problem:
+                H, W = argmin activation(||P - X*H*W*Y^T||^2_(positive samples)
+                                        +alpha*||P - X*H*W*Y^T||^2_(negative samples))
+                
+        This class only task is to compute S = activation(X*H*W*Y^T + eventual bias)
+        on chosen samples of X and Y.
+
+        """
         super().__init__()
         self.k = k
         self.Fd = Fd
@@ -89,7 +122,49 @@ class PU_Learner(nn.Module):
 
     	return(self.activation(dot + self.b_x[id_x] + self.b_y[id_y]))
 
-def pu_learning(k, x, y, P, pos_train, neg_train, pos_test, neg_test, n_epochs=100, batch_size=100, lr=1e-3, alpha=1.0, gamma=0., activation='identity'):
+def pu_learning_base(k, x, y, P, pos_train, neg_train, pos_test, neg_test, n_epochs=100, batch_size=100, lr=1e-3, alpha=1.0, gamma=0., activation='identity'):
+    """
+    
+
+    Parameters
+    ----------
+    k : int
+        Common space dimension.
+    x : numpy ndarray
+        "Drugs" embeddings.
+    y : numpy ndarray
+        "Targets" embeddings.
+    P : numpy ndarray
+        "Drug-target" network.
+    pos_train : bool torch Tensor
+        Positive train samples mask.
+    neg_train : bool torch Tensor
+        Negative train samples mask.
+    pos_test : bool torch Tensor
+        Positive test samples mask.
+    neg_test : bool torch Tensor
+        Negative test samples mask.
+    n_epochs : int, optional
+        Number of epochs. The default is 100.
+    batch_size : int, optional
+        DESCRIPTION. The default is 100.
+    lr : float, optional
+        Learning rate. The default is 1e-5.
+    train_size : float, optional
+        Train set size ratio. The default is 0.8.
+    alpha : float, optional
+        Negative/unlabelled samples weight in CustomMSELoss. The default is 1.0.
+    gamma : float, optional
+        Weight decay (Adam's regularization). The default is 0..
+    activation : string, optional
+        Activation to apply to get a score matrix, either 'sigmoid' or 'identity'. 
+        The default is 'identity'.
+
+    Returns
+    -------
+    None.
+
+    """
     #hidden_layers=[500,200,100]
     #input_numer=784
     #  use gpu if available
@@ -181,15 +256,88 @@ def pu_learning(k, x, y, P, pos_train, neg_train, pos_test, neg_test, n_epochs=1
     
     return(S, model.H, model.W, model.b_x, model.b_y, train_mask, test_mask)
 
-def pu_learning_new(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-5, train_size=0.8, alpha=1.0, gamma=0., test_balance=True, activation='identity'):
+def pu_learning(k, x, y, P, n_epochs=100, batch_size=100, lr=1e-5, train_size=0.8, alpha=1.0, gamma=0., test_balance=True, activation='identity'):
+    """
+    PU Learning pipeline.
+
+    Parameters
+    ----------
+    k : int
+        Common space dimension.
+    x : numpy ndarray
+        "Drugs" embeddings.
+    y : numpy ndarray
+        "Targets" embeddings.
+    P : numpy ndarray
+        "Drug-target" network.
+    n_epochs : int, optional
+        Number of epochs. The default is 100.
+    batch_size : int, optional
+        DESCRIPTION. The default is 100.
+    lr : float, optional
+        Learning rate. The default is 1e-5.
+    train_size : float, optional
+        Train set size ratio. The default is 0.8.
+    alpha : float, optional
+        Negative/unlabelled samples weight in CustomMSELoss. The default is 1.0.
+    gamma : float, optional
+        Weight decay (Adam's regularization). The default is 0..
+    test_balance : True, optional
+        Whether test set should be balanced or not. The default is True.
+    activation : string, optional
+        Activation to apply to get a score matrix, either 'sigmoid' or 'identity'. 
+        The default is 'identity'.
+
+    Returns
+    -------
+    See pu_learning_base.
+
+    """
     print("Spliting train and test sets...")
     pos_train, neg_train, pos_test, neg_test = get_train_test_masks(P, train_size=train_size, test_balance=test_balance)
     
-    return(pu_learning(k, x, y, P, pos_train, neg_train, pos_test, neg_test, 
+    return(pu_learning_base(k, x, y, P, pos_train, neg_train, pos_test, neg_test, 
                        n_epochs=n_epochs, batch_size=batch_size, lr=lr, 
                        alpha=alpha, gamma=gamma, activation=activation))
 
 def cross_validate(k, x, y, P, N_folds, n_epochs=100, batch_size=100, lr=1e-5, train_size=0.8, alpha=1.0, gamma=0., activation='identity'):
+    """
+    Cross validation.
+
+    Parameters
+    ----------
+    k : int
+        Common space dimension.
+    x : numpy ndarray
+        "Drugs" embeddings.
+    y : numpy ndarray
+        "Targets" embeddings.
+    P : numpy ndarray
+         Drug - target network.
+    N_folds : int
+        Number of folds.
+    n_epochs : int, optional
+        Number of epochs. The default is 100.
+    batch_size : int, optional
+        Batch Size. The default is 100.
+    lr : float, optional
+        Learning rate. The default is 1e-5.
+    train_size : float<1, optional
+        Training set / total set ratio. The default is 0.8.
+    alpha : float, optional
+        Weights for negative samples in MSE Loss. The default is 1.0.
+    gamma : float, optional
+        Weight decay (Adam's regularization). The default is 0..
+    activation : string, optional
+        Activation to apply to get a score matrix, either 'sigmoid' or 'identity'. 
+        The default is 'identity'.
+
+    Returns
+    -------
+    Predictions weighted by auc, average ROC auc, average pr auc, average 
+    accuracy.
+
+    """
     pos_mask = (P==1)
     neg_mask = (P==0)
     
@@ -256,6 +404,15 @@ def cross_validate(k, x, y, P, N_folds, n_epochs=100, batch_size=100, lr=1e-5, t
     return(S_sol/S_auc, S_auc/N_folds, S_pr/N_folds, S_acc/N_folds)
 
 def eval_test_set(P, S, test):
+    """
+    Given a ground truth P and predictions S, compute metrics on test set.
+    
+    auc : ROC AUC
+    pr : Precision recall AUC
+    acc : Accuracy
+    confusion : confusion matrix
+    
+    """
     print("Evaluation on the test set...")
     print("Test set statistics:")
     n_pos = int(P[test].sum().item())

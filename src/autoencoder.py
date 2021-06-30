@@ -17,21 +17,12 @@ from sklearn.metrics import mean_squared_error
 from math import sqrt
 import time
 
-def timeit(method):
-    def timed(*args, **kw):
-        ts = time.time()
-        result = method(*args, **kw)
-        te = time.time()
-        if 'log_time' in kw:
-            name = kw.get('log_name', method.__name__.upper())
-            kw['log_time'][name] = int((te - ts) * 1000)
-        else:
-            print('%r  %2.2f ms' % \
-                  (method.__name__, (te - ts) * 1000))
-        return result
-    return timed
 
 class GaussianNoise(nn.Module):
+    """
+    Add a Gaussian Noise to a nn.Module layer with a specified standard 
+    deviation stddev.
+    """
     def __init__(self, stddev):
         super().__init__()
         self.stddev = stddev
@@ -42,6 +33,11 @@ class GaussianNoise(nn.Module):
         return din
 
 class DropoutNoise(nn.Module):
+    """
+    Add a "Dropout Noise" to a nn.Module layer: neurons are disabled with a 
+    probability p.
+    """
+    
     def __init__(self, p):
         super().__init__()
         self.p = p
@@ -53,6 +49,24 @@ class DropoutNoise(nn.Module):
         return(x*a)
 
 class BasicBlock(nn.Module):
+    """
+    The Basic Block that constitutes a SDAE (stacked denoising autoencoder).
+    
+    Parameters:
+    ----------
+    input_shape: int
+        Input's number of components.
+    n_neurons: int
+        Number of neurons of the dense layer constituting the block.
+    activation: string, optional.
+        The activation to apply ('relu', 'tanh', or 'sigmoid'). The default is 
+        'relu'.
+    noise: string, optional
+        The noise to apply ('gaussian', 'dropout' or None). The default is 
+        None.
+    noise_arg: float
+        Noise (if so) arguments.
+    """
     def __init__(self, input_shape, n_neurons, activation='relu', noise=None, noise_arg=None):
         super().__init__()
         self.n_neurons = n_neurons
@@ -84,6 +98,31 @@ class BasicBlock(nn.Module):
         return(x)
 
 class SDAE(nn.Module):
+    """
+    A nn.Module class that implements a Stacked Denoising AutoEncoder.
+    
+    Parameters:
+    ----------
+    features : a torch.Tensor of size (?, n_samples, n_features)
+        The whole features (only indices will be passed to the forward method
+        during training).
+    input_shape : int
+        The input size (its number of components).
+    hidden_layers : list of neurons
+        Number of neurons on the hidden layers.
+    activation : string, optionnal
+        The activation to apply ('relu', 'tanh', or 'sigmoid') on all layers 
+        except the last one. The default is 'relu'.
+    last_activation : string, optionnal
+        The activation to apply ('relu', 'tanh', or 'sigmoid') on the very last
+        layer. The default is 'relu'.
+    noise_type: string, optional
+        The noise to apply ('gaussian', 'dropout' or None). The default is 
+        None.
+    noise_arg: float
+        Chosen noise (if so) arguments.
+
+    """
     def __init__(self, features, input_shape, hidden_layers, activation='relu', last_activation='relu', noise_type='dropout', noise_arg=0.2):
         super().__init__()
         self.features = features

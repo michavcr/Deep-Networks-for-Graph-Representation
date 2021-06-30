@@ -18,24 +18,13 @@ from math import sqrt
 import time
 
 from autoencoder import SDAE
-from utils import *
+from utils import timeit, visualize_TSNE
 from random_graphs import connected_components
 
-def timeit(method):
-    def timed(*args, **kw):
-        ts = time.time()
-        result = method(*args, **kw)
-        te = time.time()
-        if 'log_time' in kw:
-            name = kw.get('log_name', method.__name__.upper())
-            kw['log_time'][name] = int((te - ts) * 1000)
-        else:
-            print('%r  %2.2f ms' % \
-                  (method.__name__, (te - ts) * 1000))
-        return result
-    return timed
-
 def normalize(M):
+    """
+    Normalize the adjacency matrix M. 
+    """
     #Put diagonal elements to 0
     M  = M - np.diag(np.diag(M))
     
@@ -46,6 +35,10 @@ def normalize(M):
     return M
 
 def zero_one_normalisation(matrix, e=1e-5):
+    """
+    Zero-one (i.e. min=0 and max=1) normalisation for a matrix M.
+
+    """
     M = np.max(matrix)
     m = np.min(matrix)
     r = (matrix-m) / (M-m + e)
@@ -100,6 +93,33 @@ def PPMI(M):
     return(P)
 
 def sdae(input_net, input_number, hidden_layers, n_epochs=100, batch_size=1, activation='sigmoid', last_activation='sigmoid'):
+    """
+    Training pipeline for SDAE.
+
+    Parameters
+    ----------
+    input_net : TYPE
+        The input network.
+    input_number : TYPE
+        Number of input features.
+    hidden_layers : TYPE
+        List of hidden layers' sizes.
+    n_epochs : int, optional
+        Number of epochs. The default is 100.
+    batch_size : int, optional
+        Batch Size. The default is 1.
+    activation : string, optional
+        The activation to apply ('relu', 'tanh', or 'sigmoid') on all layers 
+        except the last one. The default is 'sigmoid'.
+    last_activation : string, optional
+        The activation to apply ('relu', 'tanh', or 'sigmoid') on the very last
+        layer. The default is 'sigmoid'.
+
+    Returns
+    -------
+    None.
+
+    """
     #hidden_layers=[500,200,100]
     #input_numer=784
     #  use gpu if available
@@ -156,6 +176,26 @@ def sdae(input_net, input_number, hidden_layers, n_epochs=100, batch_size=1, act
     return(model, train_loader, tensor_net)
 
 def get_embeddings(train_loader, N, model, size_encoded=100):
+    """
+    Given a DataLoader and a train autoencoder, collect the embeddings.
+
+    Parameters
+    ----------
+    train_loader : pytorch DataLoader
+        The DataLoader containing the data (indices).
+    N : int
+        Number of samples.
+    model : SDAE instance
+        The trained autoencoder.
+    size_encoded : int, optional
+        Size of the embeddings. The default is 100.
+
+    Returns
+    -------
+    embeddings: A numpy ndarray of size (N, size_encoded).
+        The embeddings.
+        
+    """
     trainiter = iter(train_loader)
     embeddings = np.zeros((N, size_encoded))
 
@@ -169,6 +209,39 @@ def get_embeddings(train_loader, N, model, size_encoded=100):
     
 @timeit
 def dngr_pipeline(network, N, hidden_layers, K=10, alpha=0.2, n_epochs=100, batch_size=1, activation='sigmoid', last_activation='sigmoid'):
+    """
+    DGNR Pipeline : PCO -> PPMI -> SDAE -> t-SNE and return the embeddings.
+
+    Parameters
+    ----------
+    network : numpy ndarray of size (N, N)
+        The similarity network's adjacency matrix.
+    N : int
+        Number of nodes.
+    hidden_layers : list of int
+        The number of neurons on each hidden layer, defining the architecture.
+    K : int, optional
+        Parameter for PCO (number of  edges to visit in random walk). 
+        The default is 10.
+    alpha : int, optional
+        Parameter for PCO (probability to return to inital node). The default 
+        is 0.2.
+    n_epochs : int, optional
+        Number of epochs. The default is 100.
+    batch_size : int, optional
+        Batch size. The default is 1.
+    activation : string, optional
+        The activation to apply ('relu', 'tanh', or 'sigmoid') on all SDAE 
+        layers except the last one. The default is 'sigmoid'.
+    last_activation : string, optional
+        The activation to apply ('relu', 'tanh', or 'sigmoid') on the very last
+        SDAE layer. The default is 'sigmoid'.
+
+    Returns
+    -------
+    embeddings, model, train_loader.
+
+    """
     ppmi_net = PPMI(PCO(network, K, alpha))
     model, train_loader, tensor_net = sdae(ppmi_net, N, hidden_layers, n_epochs=n_epochs, batch_size=batch_size, activation=activation, last_activation=last_activation)
     

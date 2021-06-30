@@ -117,6 +117,21 @@ def compute_accuracy(y_true, y_pred):
 
 
 def timeit(method):
+    """
+    Time decorator to print the execution time of a function.
+
+    Use @timeit before your functions.
+    
+    Parameters
+    ----------
+    None.
+    
+    Returns
+    -------
+    None.
+    
+    """
+
     def timed(*args, **kw):
         ts = time.time()
         result = method(*args, **kw)
@@ -130,7 +145,23 @@ def timeit(method):
         return result
     return timed
 
-def visualize_TSNE(embeddings,target, labels=None):
+def visualize_TSNE(embeddings, target, labels=None):
+    """
+    Allows to visualize vectors (e.g. embeddings from a neural network model) 
+    in a 2d-space, using the t-SNE algorithm.
+    Parameters
+    ----------
+    embeddings : a numpy ndarray of shape (n_samples, embd_size)
+        The vectors to plot in the 2D graph.
+    target : a numpy ndarray of shape (n_samples,)
+        The targets associated with each embedding vector. Should be integers.
+
+    Returns
+    -------
+    None.
+
+    """
+
     tsne = TSNE(n_components=2, init='pca',
                          random_state=0, perplexity=30)
     data = tsne.fit_transform(embeddings)
@@ -142,6 +173,23 @@ def visualize_TSNE(embeddings,target, labels=None):
     return
 
 def compute_similarity(net):
+    """
+    Compute Jaccard similarity matrix from a bipartite graph. It allows to
+    get a new similarity network with homogeneous nodes.
+
+    Parameters
+    ----------
+    net : numpy ndarray of shape (N1,N2)
+        The "adjacency matrix" of the bipartite graph. The similarity network
+        will be computed with the set of nodes of size N1 (corresponding to
+        the lines in this case).
+
+    Returns
+    -------
+    M : numpy ndarray of shape (N1,N2)
+      The similarity network.
+      
+    """
     M = 1 - pdist(net, metric='Jaccard')
     M = squareform(M)
     M = M + np.eye(*M.shape)
@@ -150,6 +198,10 @@ def compute_similarity(net):
     return(M)
 
 def readnet(net_path):
+    """
+    Read an adjacency matrix in a tsv file.
+
+    """
 	return(np.genfromtxt(net_path,delimiter='\t'))
 
 def extract_samples(K, tensor):
