@@ -8,9 +8,10 @@ The implemented method is composed by two steps
 - A second step based on a recommander systems algorithm : aiming at finding unknown drug-target interactions with the previously computed embeddings (which represents either drugs or proteins and the connections they have with the other biological entities in the networks). This step is a "PU-Learning" step since these new relations must be learnt from Positive examples (already established drug-target association) and Unlabelled examples (nether established drug-target potential association).
 
 In this repository :
-- The src/ directory contains the essentials of the implementation. `dngr.py` and `pu_learning.py` implements respectively both steps.
+- The `src/` directory contains the essentials of the implementation. `dngr.py` and `pu_learning.py` implements respectively both steps.
+- The `notebook/` directory provides examples of utilization, in particular `Run on deepDTnet data.ipynb` runs the whole pipeline on the data used in [1]. 
+
 ### References
-- The notebook/ directory provides examples of utilization, in particular `Run on deepDTnet data.ipynb` runs the whole pipeline on the data used in [1]. 
 
 [1] Zeng, Xiangxiang & Zhu, Siyi & lu, Weiqiang & Huang, Jin & Liu, Zehui & Zhou, Yadi & Hou, Yuan & Huang, Yin & Guo, Huimin & Fang, Jiansong & Liu, Metheny & Trapp, Bruce & Li, Lang & Nussinov, Ruth & Eng, Charis & Loscalzo, Joseph & Cheng, Feixiong. (2019). Target Identification Among Known Drugs by Deep Learning from Heterogeneous Networks. SSRN Electronic Journal. 10.2139/ssrn.3385690.`
 
