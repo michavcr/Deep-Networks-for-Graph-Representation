@@ -1,7 +1,7 @@
 # Deep-Networks-for-Graph-Representation
 Implementation of a Deep Neural Network for learning Graph Representation (DNGR) with a PU learning further step to learn new graph edges.
 
-This repository implements in Python (with the help of the PyTorch library) the whole pipeline described in the article [1] which, in the context of drug discovery, consists in predicting new target-drugs interactions from a collection of known protein-protein (PPI) networks, drug similarities network and known in the literature drug-target interactions.
+This repository implements in Python (with the PyTorch library) the whole pipeline described in the article [1] which, in the context of drug discovery, consists in predicting new target-drugs interactions from a collection of known protein-protein (PPI) networks, drug similarities network and known in the literature drug-target interactions.
 
 The implemented method is composed by two steps
 - An embedding pipeline applied on each of the different types of network considered, that is based on random walk, pointwise mutual information and denoised autoencoders. This algorithm is a Graph Representation Learning technique especially developped in [2].
